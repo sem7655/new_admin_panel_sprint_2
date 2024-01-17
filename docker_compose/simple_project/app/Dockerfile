@@ -22,5 +22,5 @@ RUN  mkdir -p /var/www/static/ \
 COPY . .
 
 EXPOSE 8000
-
+RUN chmod +x /opt/app/run_uwsgi.sh
 ENTRYPOINT ["uwsgi", "--strict", "--ini", "uwsgi.ini"]

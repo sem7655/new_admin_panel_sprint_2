@@ -1,78 +1,105 @@
-from django.contrib.postgres.aggregates import ArrayAgg
-from django.db.models import Q
-from django.http import JsonResponse
-from django.views.generic.list import BaseListView
-from django.views.generic.detail import BaseDetailView
-from django.core.paginator import Paginator
-from django.http import JsonResponse
-from django.views import View
-import json
-from django.core import serializers
-
-from movies.models import Filmwork, PersonFilmwork, RoleType
+import uuid
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils.translation import gettext_lazy as _
 
 
-class MoviesApiMixin:
-    model = Filmwork
-    http_method_names = ['get']
-
-    def get_queryset(self):
-        filmworks = Filmwork.objects.values(
-            'id', 'title', 'description', 'creation_date', 'rating', 'type'
-        ).annotate(
-            genres=ArrayAgg('genres__name', distinct=True),
-            actors=ArrayAgg(
-                'person__full_name',
-                filter=Q(personfilmwork__role=RoleType.ACTOR),
-                distinct=True,
-            ),
-            directors=ArrayAgg(
-                'person__full_name',
-                filter=Q(personfilmwork__role=RoleType.DIRECTOR),
-                distinct=True,
-            ),
-            writers=ArrayAgg(
-                'person__full_name',
-                filter=Q(personfilmwork__role=RoleType.WRITER),
-                distinct=True,
-            )
-        )
-        return filmworks
-
-    def render_to_response(self, context, **response_kwargs):
-        return JsonResponse(context)
+# Create your models here.
+# Абстрактные модели
+class TimeStampedMixin(models.Model):
+    created = models.DateTimeField(auto_now_add=True)
+    modified = models.DateTimeField(auto_now=True)
 
 
-class MoviesListApi(MoviesApiMixin, BaseListView):
-    model = Filmwork
-    paginate_by = 50
-    http_method_names = ['get']
-
-    def get_context_data(self, *, object_list=None, **kwargs):
-        queryset = self.get_queryset()
-        paginator, page, queryset, is_paginated = self.paginate_queryset(queryset, self.paginate_by)
-        if page.has_previous():
-            prev = page.previous_page_number()
-        else:
-            prev = None
-        if page.has_next():
-            next = page.next_page_number()
-        else:
-            next = None
-
-        context = {
-            'count': paginator.count,
-            'total_pages': paginator.num_pages,
-            'prev': prev,
-            'next': next,
-            'results': list(queryset),
-        }
-        return context
+    class Meta:
+        # Этот параметр указывает Django, что этот класс не является представлением таблицы
+        abstract = True
 
 
-class MoviesDetailApi(MoviesApiMixin, BaseDetailView):
+class UUIDMixin(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    def get_context_data(self, **kwargs):
-        queryset = self.get_queryset()
-        context = queryset.first()
-        return context
+    class Meta:
+        abstract = True
+
+
+class Genre(UUIDMixin, TimeStampedMixin):#Жанры
+    name = models.CharField(_('name'), max_length=255)
+    description = models.TextField(_('description'), blank=True)
+
+
+    class Meta:
+        db_table = "content\".\"genre"
+        verbose_name = _('Genre')
+        verbose_name_plural = _('Genres')
+
+    def _str_(self):
+        return self.name
+
+class Person(UUIDMixin, TimeStampedMixin):
+    full_name = models.TextField(_('full_name'), blank=False)
+
+    def _str_(self):
+        return self.full_name
+
+    class Meta:
+        db_table = "content\".\"person"
+        verbose_name = _('person')
+        verbose_name_plural = _('persons')
+
+
+
+class RoleType(models.TextChoices):
+    ACTOR = 'actor', _('actor')
+    WRITER = 'writer', _('writer')
+    DIRECTOR = 'director', _('director')
+
+class Filmwork(UUIDMixin, TimeStampedMixin):
+    class Filmtype(models.TextChoices):
+        MOVIE = 'movie', _('movie')
+        TV_SHOW = 'tv_show', _('tv_show')
+    title = models.CharField(_('title'), max_length=255)
+    description = models.TextField(_('description'), blank=True)
+    creation_date = models.DateField(_('creation_date'), blank=False)
+    rating = models.FloatField(_('rating'), blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    type = models.TextField(_('type'), choices=Filmtype.choices, blank=False)
+    genres = models.ManyToManyField(Genre, through='GenreFilmwork')
+    person = models.ManyToManyField(Person, through='PersonFilmwork')
+
+    def _str_(self):
+        return self.title
+
+
+
+    class Meta:
+        db_table = "content\".\"film_work"
+        verbose_name = _("Film")
+        verbose_name_plural = _("Films")
+
+
+class GenreFilmwork(UUIDMixin):
+    film_work = models.ForeignKey('Filmwork', on_delete=models.CASCADE)
+    genre = models.ForeignKey('Genre', on_delete=models.CASCADE)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "content\".\"genre_film_work"
+        verbose_name = _("GenreFilmwork")
+        verbose_name_plural = _("GenreFilmwork_verbose_name_plural")
+        indexes = [
+            models.Index(fields=['film_work', 'genre'], name='film_work_genre')
+        ]
+
+class PersonFilmwork(UUIDMixin):
+    film_work = models.ForeignKey('Filmwork', on_delete=models.CASCADE)
+    person = models.ForeignKey('Person', on_delete=models.CASCADE)
+    role = models.TextField(_('role'), null=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "content\".\"person_film_work"
+        verbose_name = _("Person Filmwork")
+        verbose_name_plural = _("PersonFilmWork_verbose_name_plural")
+        indexes = [
+            models.Index(fields=['film_work', 'person', 'role'], name='film_work_person_role')
+            ]

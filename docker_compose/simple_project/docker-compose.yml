@@ -5,7 +5,6 @@ services:
     build: app
     volumes:
       - static_value_data:/opt/app/static/
-      - media_value_data:/opt/app/media/
     depends_on:
       - postgres
 

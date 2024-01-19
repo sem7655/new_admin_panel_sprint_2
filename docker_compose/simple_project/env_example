@@ -3,3 +3,7 @@ USER=app
 PASSWORD=123qwe
 SECRET_KEY='django-insecure-(-fq^-cje+al%70)@#fn0jn*i%%w1$4at9zkm^ak=z6bu#p_=('
 DEBUG=True
+
+POSTGRES_DB=movies_database
+POSTGRES_USER=app
+POSTGRES_PASSWORD=123qwe
